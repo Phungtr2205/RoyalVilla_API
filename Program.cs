@@ -1,10 +1,37 @@
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi;
 using RoyalVilla_API.Data;
 using RoyalVilla_API.Models;
-using RoyalVilla_API.Migrations;
 using RoyalVilla_API.Models.DTO;
+using RoyalVilla_API.Services;
 using Scalar.AspNetCore;
+using System.Reflection.Metadata;
+using System.Text;
+
+
 var builder = WebApplication.CreateBuilder(args);
+var key = Encoding.ASCII.GetBytes(builder.Configuration.GetSection("JwtSettings")["Secret"]);
+
+
+builder.Services.AddAuthentication(option =>
+{
+    option.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+}).AddJwtBearer(options =>
+{
+    options.RequireHttpsMetadata = false;
+    options.SaveToken = true;
+    options.TokenValidationParameters = new TokenValidationParameters
+    {
+        ValidateIssuerSigningKey = true,
+        IssuerSigningKey = new SymmetricSecurityKey(key),
+        ValidateIssuer = false,
+        ValidateAudience = false,
+        ValidateLifetime = false,
+        ClockSkew = TimeSpan.Zero
+    };
+});
 
 // Add services to the container.
 builder.Services.AddDbContext<ApplicationDbContext>(option => {
@@ -12,13 +39,44 @@ builder.Services.AddDbContext<ApplicationDbContext>(option => {
 });
 builder.Services.AddControllers();
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
-builder.Services.AddOpenApi();
+builder.Services.AddOpenApi(options => {
+    options.AddDocumentTransformer((document, context, CancellationToken) =>
+    {
+
+        document.Components ??= new();
+        document.Components.SecuritySchemes = new Dictionary<string, IOpenApiSecurityScheme>
+        {
+            ["Bearer"] = new OpenApiSecurityScheme
+            {
+                Type = SecuritySchemeType.Http,
+                Scheme = "bearer",
+                BearerFormat = "JWT",
+                Description = "Enter JWT Bearer Token"
+            }
+        };
+
+        document.Security =
+        [
+            new OpenApiSecurityRequirement
+           {
+               {new OpenApiSecuritySchemeReference("Bearer"), new List<String>() }
+           }
+            ];
+        return Task.CompletedTask;
+    });
+});
+
 builder.Services.AddAutoMapper(o =>
 {
-    o.CreateMap<RoyalVilla_API.Models.Villa, VillaCreateDTO>().ReverseMap();
-    o.CreateMap<RoyalVilla_API.Models.Villa, VillaUpdateDTO>().ReverseMap();
-    o.CreateMap<RoyalVilla_API.Models.Villa, VillaDTO>().ReverseMap();
+    o.CreateMap<Villa, VillaCreateDTO>().ReverseMap();
+    o.CreateMap<Villa, VillaUpdateDTO>().ReverseMap();
+    o.CreateMap<Villa, VillaDTO>().ReverseMap();
+    o.CreateMap<VillaUpdateDTO, VillaDTO>().ReverseMap();
+    o.CreateMap<User, UserDTO>().ReverseMap();
 });
+
+builder.Services.AddScoped<IAuthService, AuthService>();
+
 var app = builder.Build();
 await SeedDataAsync(app);
 // Configure the HTTP request pipeline.
@@ -29,7 +87,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
-
+app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
