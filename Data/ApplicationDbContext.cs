@@ -7,6 +7,7 @@ namespace RoyalVilla_API.Data
     {
         public  DbSet<Villa> Villa { get; set; }
         public  DbSet<User> Users { get; set; } // Add DbSet for User entity
+        public DbSet<VillaAmenities> VillaAmenities { get; set; } // Add DbSet for VillaAmenities entity
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
